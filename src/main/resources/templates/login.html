@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Login</title>
+    <meta charset="UTF-8"/>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: "Segoe UI", system-ui, sans-serif;
+        }
+        .login-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(15px);
+            border-radius: 16px;
+            padding: 2.5rem;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+
+        /* Offline Overlay UI */
+        #offlineModal {
+          display:none;
+          position:fixed;
+          top:0; left:0;
+          width:100%; height:100%;
+          background:rgba(0,0,0,0.75);
+          color:white;
+          font-size:22px;
+          text-align:center;
+          padding-top:20%;
+          z-index:9999;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- 🔴 Offline Alert -->
+<div id="offlineModal">
+  ❌ Internet connection lost<br>
+  Please wait... Your work is paused.
+</div>
+
+<div class="login-card">
+    <h2 class="text-white text-center">Welcome Back</h2>
+
+    <form id="loginForm" method="post" th:action="@{/events/login}">
+        <div class="mb-3 position-relative">
+            <i class="bi bi-person-fill input-icon"></i>
+            <input type="text" class="form-control" name="username" placeholder="Username" required>
+        </div>
+
+        <div class="mb-4 position-relative">
+            <i class="bi bi-lock-fill input-icon"></i>
+            <input type="password" class="form-control" name="password" placeholder="Password" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100" id="loginBtn">
+            Sign In
+        </button>
+    </form>
+
+    <p class="text-center text-light mt-3">Secure login powered by Spring Boot & Thymeleaf</p>
+</div>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    /* =========================
+       DEVICE & USER CONTEXT TRACKING
+       ========================= */
+    function detectBrowser() {
+        const ua = navigator.userAgent;
+        if (ua.includes("Edg/")) return "Edge";
+        if (ua.includes("OPR") || ua.includes("Opera")) return "Opera";
+        if (ua.includes("Firefox")) return "Firefox";
+        if (ua.includes("Chrome") && !ua.includes("Edg")) return "Chrome";
+        if (ua.includes("Safari") && !ua.includes("Chrome")) return "Safari";
+        return "Unknown";
+    }
+
+    function getBrowserVersion() {
+        const ua = navigator.userAgent;
+        if (ua.includes("Edg/")) return ua.match(/Edg\/([\d\.]+)/)?.[1] || "unknown";
+        if (ua.includes("OPR") || ua.includes("Opera")) return ua.match(/(Opera|OPR)\/([\d\.]+)/)?.[2] || "unknown";
+        if (ua.includes("Firefox")) return ua.match(/Firefox\/([\d\.]+)/)?.[1] || "unknown";
+        if (ua.includes("Chrome") && !ua.includes("Edg")) return ua.match(/Chrome\/([\d\.]+)/)?.[1] || "unknown";
+        if (ua.includes("Safari") && !ua.includes("Chrome")) return ua.match(/Version\/([\d\.]+)/)?.[1] || "unknown";
+        return "unknown";
+    }
+
+    function detectOS() {
+        const ua = navigator.userAgent;
+        if (/Windows/i.test(ua)) return "Windows";
+        if (/Macintosh|Mac OS/i.test(ua)) return "macOS";
+        if (/Linux/i.test(ua)) return "Linux";
+        if (/Android/i.test(ua)) return "Android";
+        if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+        return "Unknown";
+    }
+
+    function buildPayload() {
+        return {
+            browser: detectBrowser(),
+            browserVersion: getBrowserVersion(),
+            userAgent: navigator.userAgent,
+            os: detectOS(),
+            platform: navigator.platform,
+            deviceType: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+                ? "mobile"
+                : "desktop",
+            language: navigator.language,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            screenResolution: `${screen.width}x${screen.height}`,
+            viewport: `${window.innerWidth}x${window.innerHeight}`,
+            colorDepth: screen.colorDepth || 0,
+            connectionType: navigator.connection?.effectiveType || "unknown",
+            downlink: navigator.connection?.downlink || 0,
+            rtt: navigator.connection?.rtt || 0,
+            pageUrl: window.location.href,
+            referrer: document.referrer || null,
+            eventType: "login_submit"
+        };
+    }
+
+    const form = document.getElementById("loginForm");
+    let submitted = false;
+
+    form.addEventListener("submit", function (e) {
+
+        // 🛑 Prevent submit if offline
+        if (!navigator.onLine) {
+            alert("Internet is not available. Please reconnect and try again.");
+            e.preventDefault();
+            return;
+        }
+
+        if (submitted) return;
+        submitted = true;
+
+        e.preventDefault();
+
+        const blob = new Blob(
+            [JSON.stringify(buildPayload())],
+            { type: "application/json" }
+        );
+
+        navigator.sendBeacon("/events/track", blob);
+
+        HTMLFormElement.prototype.submit.call(form);
+    });
+
+
+    /* =========================
+       OFFLINE / ONLINE HANDLING
+       ========================= */
+    const modal = document.getElementById("offlineModal");
+    const loginBtn = document.getElementById("loginBtn");
+
+    function showOffline() {
+        console.log("Internet Lost");
+        modal.style.display = "block";
+        loginBtn.disabled = true;
+    }
+
+    function hideOffline() {
+        console.log("Internet Restored");
+        modal.style.display = "none";
+        loginBtn.disabled = false;
+    }
+
+    // Browser events
+    window.addEventListener("offline", showOffline);
+    window.addEventListener("online", hideOffline);
+
+    // Check initial state
+    if (!navigator.onLine) {
+        showOffline();
+    }
+});
+</script>
+
+</body>
+</html>
